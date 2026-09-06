@@ -1,8 +1,8 @@
-# Shared Household Chores Tool — MVP Project Scope
+# ChoreCrew — MVP Project Scope
 
 ## 1. Project Overview
 
-The Shared Household Chores Tool is an application for organizing, assigning, tracking, and balancing household chores among people who live together.
+ChoreCrew is an application for organizing, assigning, tracking, and balancing household chores among people who live together.
 
 The tool should support different household types:
 
@@ -873,7 +873,7 @@ The application should make it easier to answer:
 
 ## 30. Final MVP Definition
 
-The MVP is a shared household chore-management application for couples, families, and roommates.
+ChoreCrew is a shared household chore-management application for couples, families, and roommates.
 
 Users create a household, invite members, assign roles, create chores from templates or manually, schedule and rotate chores, group chores into routines, mark chores complete or unfinished, earn and lose points, request swaps, spend rewards to refuse and reassign chores, unlock funny titles, and monitor workload fairness.
 
@@ -889,3 +889,120 @@ The application provides:
 - Basic household fairness statistics
 
 The focus of the MVP is **shared responsibility, fairness, flexibility, and lightweight fun** without adding unnecessary complexity such as payments, AI features, advanced analytics, or external integrations.
+
+---
+
+## 31. Architecture Decision
+
+### 31.1 Decision
+
+The MVP will be built as a server-rendered Django monolith. The application will use one Django codebase for the user interface, business logic, authentication, permissions, and internal endpoints.
+
+The selected stack was checked against official release sources on September 6, 2026. Stable releases are used unless the table records a deliberate exception. Patch versions will be locked in dependency and container files during implementation.
+
+| Layer | MVP baseline | Version review and decision |
+|---|---|---|
+| Python runtime | Python 3.13.15 | Python 3.14.7 is newer, and Django 5.2 supports it. Celery 5.6 documents initial Python 3.14 support but lists Python 3.13 in its formal supported-version matrix, so the MVP will use the latest Python 3.13 patch for the clearer compatibility guarantee. |
+| Application framework | Django 5.2.17 LTS | Django 6.1.1 is newer. The MVP will remain on 5.2.17 because it is the current LTS line and receives security and data-loss fixes through April 2028. |
+| Main user interface | Django 5.2.17 templates and HTMX 4.0.0 | Django templates follow the Django version. HTMX 4.0.0 is the newest final release and is suitable for a new project. It must be pinned explicitly because its package channel remains `next` temporarily while HTMX 2.0.10 remains the default `latest` tag. |
+| Small browser interactions | Alpine.js 3.17.1 | This is the newest published Alpine.js release. Use it only where HTML and HTMX are insufficient. |
+| Styling | Tailwind CSS 4.3.3 | This is the newest stable package release. |
+| Database | PostgreSQL 18.6 | PostgreSQL 18.6 is the newest stable release. PostgreSQL 19 Beta 3 is newer prerelease software and will not be used for the MVP. |
+| Background jobs | Celery 5.6.3 | This is the newest stable Celery release. |
+| Periodic jobs | Celery Beat from Celery 5.6.3 | Celery Beat ships with Celery and has no independent version to select. It follows the Celery 5.6.3 baseline. |
+| Message broker and job result infrastructure | Redis Open Source 8.10.1 | This is the newest stable Redis Open Source patch release. |
+| Calendar interface | FullCalendar 7.0.2 using Django JSON endpoints | This is the newest stable FullCalendar release. |
+| Uploaded proof photos | Django 5.2.17 filesystem storage | Django's filesystem storage is part of Django and has no independent version. The files remain in a persistent local media directory for the MVP. |
+| Development and deployment packaging | Docker Engine 29.8.0 and Docker Compose 5.4.0 | These are the newest stable Engine and Compose releases found during the review. Application containers will pin their Python, PostgreSQL, and Redis image versions independently. |
+
+Official release sources used for this review:
+
+- [Django downloads and supported versions](https://www.djangoproject.com/download/)
+- [Django and Python compatibility](https://docs.djangoproject.com/en/5.2/faq/install/)
+- [Python release versions](https://www.python.org/doc/versions/)
+- [HTMX 4.0 release announcement](https://four.htmx.org/announcements/2026-08-28-htmx-4.0.0-is-released)
+- [HTMX package releases](https://www.npmjs.com/package/htmx.org?activeTab=versions)
+- [Alpine.js package releases](https://www.npmjs.com/package/alpinejs)
+- [Tailwind CSS package releases](https://www.npmjs.com/package/tailwindcss?activeTab=versions)
+- [PostgreSQL release notes](https://www.postgresql.org/docs/release/)
+- [Celery package releases](https://pypi.org/project/celery/)
+- [Celery 5.6 support and change history](https://docs.celeryq.dev/en/stable/changelog.html)
+- [Redis Open Source 8.10 release notes](https://redis.io/docs/latest/operate/oss_and_stack/stack-with-enterprise/release-notes/redisce/redisos-8.10-release-notes/)
+- [FullCalendar releases](https://github.com/fullcalendar/fullcalendar/releases)
+- [Docker Engine 29 release notes](https://docs.docker.com/engine/release-notes/29/)
+- [Docker Compose releases](https://github.com/docker/compose/releases)
+
+### 31.2 Rationale
+
+This architecture provides a responsive application without requiring separate frontend and backend applications. Most MVP screens consist of forms, task lists, dashboards, comments, and permission-controlled actions, which fit Django's server-rendered model well. HTMX will provide partial-page updates for interactions such as completing chores, filtering lists, responding to swap requests, and adding comments.
+
+Keeping authentication, validation, permissions, and HTML rendering in Django reduces duplication and shortens the MVP implementation path. Django Admin can also provide an internal management interface for chore templates, rewards, titles, and operational support.
+
+The architecture may expose focused JSON endpoints where a browser component requires structured data. The calendar is the initial expected use case. A general public API and a separate single-page application are not part of the MVP.
+
+### 31.3 Application Structure
+
+The Django project should be divided into domain-focused applications. Likely boundaries include:
+
+- Accounts and authentication
+- Households and memberships
+- Chores, assignments, occurrences, and routines
+- Swaps and reward-based reassignments
+- Points, rewards, and titles
+- Comments and completion proof
+- Notifications
+- Dashboard, workload, and calendar views
+
+These are logical boundaries within one deployable application, not independent services.
+
+### 31.4 Scheduling and Background Processing
+
+Chore definitions and individual scheduled occurrences must be stored separately. Each due instance of a one-time or recurring chore is represented by a `ChoreOccurrence` so that completion, missed work, assignments, and point changes have stable historical records.
+
+Celery workers will process asynchronous work such as notifications and uploaded-photo follow-up processing. Celery Beat will run a small set of periodic maintenance tasks that:
+
+- Create upcoming chore occurrences from recurrence rules.
+- Mark past-due occurrences as unfinished or overdue.
+- Apply missed-chore point deductions.
+- Queue configured reminders and notifications.
+
+The system will not create a separate Celery Beat schedule entry for every chore. Periodic tasks will query the database for work that is due. All scheduled jobs must be idempotent so retries cannot create duplicate occurrences, send unintended duplicate state changes, or deduct points more than once.
+
+### 31.5 Data Integrity and History
+
+PostgreSQL is the system of record. Database transactions and constraints must protect operations that change several related records, including:
+
+- Completing a chore and awarding points.
+- Accepting a swap and changing assignments.
+- Spending points and reassigning a refused chore.
+- Marking an occurrence unfinished and deducting points.
+
+Point changes must be recorded as immutable `PointTransaction` entries. A member's displayed balance may be cached, but each balance change must remain traceable to its transaction.
+
+Each chore occurrence should preserve the relevant assignment, difficulty, estimated effort, and point value used at the time it was scheduled. Editing a chore or template later must not rewrite historical results.
+
+The household must have a configured timezone. Due dates, recurrence calculations, reminders, and overdue processing will use that timezone while timestamps are stored consistently by Django.
+
+### 31.6 Authentication, Authorization, and Files
+
+The project will define a custom Django user model when the project is initialized. Household permissions will be enforced on the server for every operation using the Admin, Adult, and Child membership roles described above. Child-mode configuration affects both the interface and server-side authorization.
+
+For the MVP, completion photos will be stored in a local media directory using Django's filesystem storage. The deployed application must mount this directory as persistent storage so uploaded files survive application restarts and deployments. File type and size limits must be validated by the application.
+
+Application code will interact with uploaded files through Django's storage API. This keeps open the option to move photos to S3-compatible object storage in a later version without changing the chore and completion domain models.
+
+### 31.7 Deployment Shape
+
+The MVP will be deployed as a small set of containers built from the same application source:
+
+- Django web application
+- Celery worker
+- Celery Beat scheduler
+- PostgreSQL
+- Redis
+
+Production deployments may use managed PostgreSQL and Redis while preserving the same application architecture. S3-compatible object storage may replace the persistent local media directory in a later version. Horizontal service decomposition is not planned for the MVP.
+
+### 31.8 Future Evolution
+
+The monolith can add versioned API endpoints later if native mobile clients or external integrations become requirements. Highly interactive areas can also adopt isolated client-side components without replacing the server-rendered application. Those additions should be driven by a concrete product requirement rather than included in the initial MVP.
