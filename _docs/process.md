@@ -1,8 +1,15 @@
-- Tasks are GitHub issues, one at a time
-- Read the acceptance criteria before starting and before closing
-- Commit regularly
+# Work process
 
-Roles
+- GitHub issues are the source of truth for active tasks.
+- Work on one issue at a time.
+- Read the acceptance criteria before starting and before finishing.
+- Use documents in `_docs/outdated/` only as historical context. They do
+  not override the assigned issue.
+- Commit regularly.
 
-- PM - grooms a task before anyone implements it, follows _docs/team/pm.md
-- Engineer - implements one groomed task, follows _docs/team/software-engineer.md
+## Roles
+
+- PM - grooms an issue before anyone implements it and follows
+  `_docs/team/pm.md`.
+- Engineer - implements one groomed issue and follows
+  `_docs/team/software-engineer.md`.
