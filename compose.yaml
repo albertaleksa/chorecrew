@@ -1,0 +1,56 @@
+services:
+  db:
+    image: postgres:18.6
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-chorecrew}
+      POSTGRES_USER: ${POSTGRES_USER:-chorecrew}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chorecrew-local}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+    volumes:
+      - postgres_data:/var/lib/postgresql
+
+  redis:
+    image: redis:8.10.1
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  web:
+    build:
+      context: .
+    init: true
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-django-insecure-compose-development}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DJANGO_EMAIL_BACKEND: ${DJANGO_EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}
+      DJANGO_TIME_ZONE: ${DJANGO_TIME_ZONE:-UTC}
+      DJANGO_STATIC_ROOT: ${DJANGO_STATIC_ROOT:-/app/staticfiles}
+      DJANGO_MEDIA_ROOT: ${DJANGO_MEDIA_ROOT:-/app/media}
+      DATABASE_ENGINE: postgresql
+      POSTGRES_DB: ${POSTGRES_DB:-chorecrew}
+      POSTGRES_USER: ${POSTGRES_USER:-chorecrew}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chorecrew-local}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - media_data:/app/media
+
+volumes:
+  postgres_data:
+  media_data:
