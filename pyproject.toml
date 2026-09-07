@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chorecrew"
+version = "0.1.0"
+description = "Shared household chore management"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "Django==5.2.17",
+]
+
+[tool.setuptools]
+packages = ["chorecrew"]
